@@ -1,7 +1,11 @@
+#![allow(non_snake_case)]
+
+pub mod http;
+
+use std::fs;
 use std::io::prelude::*;
 use std::net::TcpListener;
 use std::net::TcpStream;
-use std::fs;
 static SRV_ID: &'static str = "GlassCannon/0.0.0";
 
 fn main() {
@@ -19,16 +23,16 @@ fn hc(mut stream: TcpStream) {
     let (status_line, filename) = if buffer.starts_with(get) {
         (sc("200".to_string()), "hello.html")
     } else {
-      ("HTTP/1.1 405 METHOD NOT ALLOWED\r\n\r\n", "405.html")
+        ("HTTP/1.1 405 METHOD NOT ALLOWED\r\n\r\n", "405.html")
     };
-  let contents = fs::read_to_string(filename).unwrap();
-  let response = format!("{}{}", status_line, contents);
+    let contents = fs::read_to_string(filename).unwrap();
+    let response = format!("{}{}", status_line, contents);
 
-  stream.write(response.as_bytes()).unwrap();
-  stream.flush().unwrap();
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
 }
 
-fn sc(code: String) ->&'static str{
+fn sc(code: String) -> &'static str {
     if code.eq("200") {
         return "HTTP/1.1 200 OK\r\ncontent-type: text/html\r\nserver: GlassCannon\r\n\r\n";
     }
