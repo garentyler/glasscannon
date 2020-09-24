@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::convert::{From, TryFrom};
 
 pub struct HttpHeader {
@@ -35,6 +36,19 @@ pub enum HttpMethod {
     Trace,
     Patch,
 }
+impl HttpMethod {
+    pub fn read(bytes: &mut VecDeque<u8>) -> Option<HttpMethod> {
+        let mut method_bytes = vec![];
+        while bytes.get(method_bytes.len()) != Some(&(' ' as u8)) {
+            method_bytes.push(bytes.get(method_bytes.len()).unwrap());
+        }
+        if let Ok(method) = HttpMethod::try_from(String::from_utf8_lossy(method_bytes)) {
+            Some(method)
+        } else {
+            None
+        }
+    }
+}
 impl From<HttpMethod> for String {
     fn from(method: HttpMethod) -> Self {
         match method {
@@ -49,6 +63,23 @@ impl From<HttpMethod> for String {
             HttpMethod::Patch => "PATCH",
         }
         .into()
+    }
+}
+impl TryFrom<String> for HttpMethod {
+    type Error = ();
+    fn try_from(method: String) -> Result<Self, Self::Error> {
+        match &*method {
+            "GET" => Ok(HttpMethod::Get),
+            "HEAD" => Ok(HttpMethod::Head),
+            "POST" => Ok(HttpMethod::Post),
+            "PUT" => Ok(HttpMethod::Put),
+            "DELETE" => Ok(HttpMethod::Delete),
+            "CONNECT" => Ok(HttpMethod::Connect),
+            "OPTIONS" => Ok(HttpMethod::Options),
+            "TRACE" => Ok(HttpMethod::Trace),
+            "PATCH" => Ok(HttpMethod::Patch),
+            _ => Err(()),
+        }
     }
 }
 
@@ -141,13 +172,14 @@ impl From<HttpRequest> for String {
     }
 }
 
-pub struct HttpResponse {
+pub struct HttpResponse<T: Into<String>> {
     pub version: String,
     pub status: u32,
     pub headers: Vec<HttpHeader>,
+    pub content: Option<T>,
 }
-impl From<HttpResponse> for String {
-    fn from(response: HttpResponse) -> Self {
+impl<T: Into<String>> From<HttpResponse<T>> for String {
+    fn from(response: HttpResponse<T>) -> Self {
         let mut out = String::new();
         out += &format!(
             "{} {} {}\r\n",
@@ -155,9 +187,12 @@ impl From<HttpResponse> for String {
             response.status,
             HttpStatusCode::get_status_message(response.status),
         );
-        for header in request.headers {
-            let s: String = header.into();
-            out += &s;
+        for header in response.headers {
+            out += &Into::<String>::into(header);
+        }
+        out += "\r\n";
+        if let Some(content) = response.content {
+            out += &Into::<String>::into(content);
         }
         out
     }
