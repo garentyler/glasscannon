@@ -40,9 +40,11 @@ impl HttpMethod {
     pub fn read(bytes: &mut VecDeque<u8>) -> Option<HttpMethod> {
         let mut method_bytes = vec![];
         while bytes.get(method_bytes.len()) != Some(&(' ' as u8)) {
-            method_bytes.push(bytes.get(method_bytes.len()).unwrap());
+            method_bytes.push(*bytes.get(method_bytes.len()).unwrap());
         }
-        if let Ok(method) = HttpMethod::try_from(String::from_utf8_lossy(method_bytes)) {
+        if let Ok(method) =
+            HttpMethod::try_from(String::from_utf8_lossy(&method_bytes).into_owned())
+        {
             Some(method)
         } else {
             None
