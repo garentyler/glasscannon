@@ -18,6 +18,11 @@ impl From<HttpHeader> for String {
         format!("{}: {}\r\n", header.name, header.value)
     }
 }
+impl From<&HttpHeader> for String {
+    fn from(header: &HttpHeader) -> Self {
+        format!("{}: {}\r\n", header.name, header.value)
+    }
+}
 impl TryFrom<String> for HttpHeader {
     type Error = ();
     fn try_from(_s: String) -> Result<Self, Self::Error> {
@@ -174,28 +179,76 @@ impl From<HttpRequest> for String {
     }
 }
 
-pub struct HttpResponse<T: Into<String>> {
-    pub version: String,
+pub struct HttpResponse {
+    // pub version: String,
     pub status: u32,
     pub headers: Vec<HttpHeader>,
-    pub content: Option<T>,
+    pub content: String,
 }
-impl<T: Into<String>> From<HttpResponse<T>> for String {
-    fn from(response: HttpResponse<T>) -> Self {
+impl HttpResponse {
+    pub fn new(status: u32) -> HttpResponse {
+        HttpResponse {
+            status: status,
+            headers: vec![],
+            content: "".into(),
+        }
+    }
+    pub fn set_header(&mut self, name: &str, value: &str) {
+        for i in 0..self.headers.len() {
+            if self.headers[i].name == name {
+                self.headers[i].value = value.into();
+                return;
+            }
+        }
+        self.headers.push(HttpHeader::new(name, value));
+    }
+}
+impl From<HttpResponse> for String {
+    fn from(response: HttpResponse) -> Self {
         let mut out = String::new();
         out += &format!(
-            "{} {} {}\r\n",
-            response.version,
+            "HTTP/1.1 {} {}\r\n",
+            // response.version,
             response.status,
             HttpStatusCode::get_status_message(response.status),
         );
         for header in response.headers {
             out += &Into::<String>::into(header);
         }
+        out += &Into::<String>::into(HttpHeader {
+            name: "Content-Length".into(),
+            value: response.content.len().to_string(),
+        });
         out += "\r\n";
-        if let Some(content) = response.content {
-            out += &Into::<String>::into(content);
+        out += &response.content;
+        out
+    }
+}
+impl From<&HttpResponse> for String {
+    fn from(response: &HttpResponse) -> Self {
+        let mut out = String::new();
+        out += &format!(
+            "HTTP/1.1 {} {}\r\n",
+            // response.version,
+            response.status,
+            HttpStatusCode::get_status_message(response.status),
+        );
+
+        let mut found_content_length = false;
+        for header in &response.headers {
+            out += &Into::<String>::into(header);
+            if header.name == "Content-Length" {
+                found_content_length = true;
+            }
         }
+        if !found_content_length {
+            out += &Into::<String>::into(HttpHeader {
+                name: "Content-Length".into(),
+                value: response.content.len().to_string(),
+            });
+        }
+        out += "\r\n";
+        out += &response.content;
         out
     }
 }
