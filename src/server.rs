@@ -8,6 +8,9 @@ use tokio::net::{TcpListener, TcpStream};
 
 #[async_recursion::async_recursion]
 async fn get_files(dir: PathBuf, config: &Config) -> Result<Vec<String>, ServerError> {
+    if !dir.as_path().exists() {
+        return Err(ServerError::FileLoadError);
+    }
     let mut file_paths = vec![];
     let mut entries = tokio::fs::read_dir(dir.as_path()).await?;
     while let Some(entry) = entries.next_entry().await? {
@@ -230,12 +233,25 @@ impl Server {
 
 #[derive(Debug)]
 pub enum ServerError {
-    IoError(std::io::Error),
+    IoError,
     ParseError,
+    ConfigError,
+    FileLoadError,
+}
+impl ServerError {
+    pub fn message(&self) -> &'static str {
+        use ServerError::*;
+        match self {
+            IoError => "IoError",
+            ParseError => "Could not parse network data",
+            ConfigError => "Could not load config",
+            FileLoadError => "Could not load files",
+        }
+    }
 }
 impl From<std::io::Error> for ServerError {
-    fn from(error: std::io::Error) -> ServerError {
-        ServerError::IoError(error)
+    fn from(_error: std::io::Error) -> ServerError {
+        ServerError::IoError
     }
 }
 impl<A> From<nom::Err<A>> for ServerError {
@@ -245,6 +261,6 @@ impl<A> From<nom::Err<A>> for ServerError {
 }
 impl From<toml::de::Error> for ServerError {
     fn from(_error: toml::de::Error) -> ServerError {
-        ServerError::ParseError
+        ServerError::ConfigError
     }
 }

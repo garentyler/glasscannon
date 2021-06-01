@@ -41,7 +41,6 @@ pub async fn start() -> Result<Server, ServerError> {
         );
         Server::start(config).await
     } else {
-        error!("Could not load config");
-        Err(ServerError::ParseError)
+        Err(ServerError::ConfigError)
     }
 }
