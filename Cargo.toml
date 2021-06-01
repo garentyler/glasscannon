@@ -1,10 +1,14 @@
 [package]
-name = "GlassCannon"
+name = "glasscannon"
 version = "0.1.0"
-authors = ["Danton <43303409+khimno@users.noreply.github.com>"]
+authors = ["Danton <43303409+khimno@users.noreply.github.com>", "Garen Tyler <garentyler@gmail.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-lazy_static = "1.4.0"
+chrono = "0.4.13"
+log = "*"
+fern = "0.6"
+serde = { version = "1.0.117", features = ["derive"] }
+url = { version = "2.2.2", features = ["serde"] }
+tokio = { version = "1.6.1", features = ["full"] }
+nom = "6.1.2"
