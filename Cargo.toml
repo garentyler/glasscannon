@@ -13,3 +13,4 @@ url = { version = "2.2.2", features = ["serde"] }
 tokio = { version = "1.6.1", features = ["full"] }
 nom = "6.1.2"
 async-recursion = "0.3.2"
+toml = "0.5.8"

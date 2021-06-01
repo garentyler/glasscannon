@@ -198,7 +198,7 @@ impl HttpRequest {
                     _,        // newline
                 ),
             )) => {
-                let base = Url::parse(&format!("http://{}/", crate::BIND_ADDR)).unwrap();
+                let base = Url::parse("http://example.com/").unwrap();
                 if let Ok(path) = base.join(path) {
                     Ok((
                         remaining_src,
@@ -243,10 +243,10 @@ impl Display for HttpRequest {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct HttpResponseBuilder {
-    version: String,
-    status: HttpStatus,
-    headers: HashMap<String, String>,
-    body: Vec<u8>,
+    pub version: String,
+    pub status: HttpStatus,
+    pub headers: HashMap<String, String>,
+    pub body: Vec<u8>,
 }
 impl HttpResponseBuilder {
     pub fn new() -> HttpResponseBuilder {
@@ -288,10 +288,10 @@ impl HttpResponseBuilder {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct HttpResponse {
-    version: String,
-    status: HttpStatus,
-    headers: HashMap<String, String>,
-    body: Vec<u8>,
+    pub version: String,
+    pub status: HttpStatus,
+    pub headers: HashMap<String, String>,
+    pub body: Vec<u8>,
 }
 impl HttpResponse {
     pub fn new() -> HttpResponseBuilder {

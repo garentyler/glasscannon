@@ -1,4 +1,5 @@
 use crate::http::*;
+use log::*;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use tokio::fs::File;
@@ -6,7 +7,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 #[async_recursion::async_recursion]
-async fn get_files(dir: PathBuf) -> Result<Vec<String>, ServerError> {
+async fn get_files(dir: PathBuf, config: &Config) -> Result<Vec<String>, ServerError> {
     let mut file_paths = vec![];
     let mut entries = tokio::fs::read_dir(dir.as_path()).await?;
     while let Some(entry) = entries.next_entry().await? {
@@ -17,30 +18,103 @@ async fn get_files(dir: PathBuf) -> Result<Vec<String>, ServerError> {
         if path.as_path().is_file() {
             recursive_paths.push(String::from(path.to_str().unwrap_or("ERR")));
         } else if path.as_path().is_dir() {
-            recursive_paths.append(&mut get_files(path.clone()).await?);
+            recursive_paths.append(&mut get_files(path.clone(), config).await?);
         }
     }
     let mut set = HashSet::new();
     recursive_paths.retain(|x| set.insert(x.clone()));
+    recursive_paths.retain(|x| config.preload.contains(&String::from(&x[5..])));
     Ok(recursive_paths)
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Config {
+    pub port: u16,
+    pub resources: PathBuf,
+    pub preload: Vec<String>,
+    pub mimetypes: HashMap<String, String>,
+}
+impl Config {
+    pub fn new(
+        port: u16,
+        resources: PathBuf,
+        preload: Vec<String>,
+        mimetypes: HashMap<String, String>,
+    ) -> Config {
+        Config {
+            port,
+            resources,
+            preload,
+            mimetypes,
+        }
+    }
+    pub async fn from_file(path: &str) -> Result<Config, ServerError> {
+        let mut port = 15000;
+        let mut resources = PathBuf::from("./res/");
+        let mut preload = vec![];
+        let mut mimetypes = HashMap::new();
+        if Path::new(path).exists() {
+            use toml::Value;
+            let mut contents = vec![];
+            File::open(&path).await?.read_to_end(&mut contents).await?;
+            if let Value::Table(cfg) = String::from_utf8_lossy(&contents).parse::<Value>()? {
+                if let Some(Value::Table(cfg_server)) = cfg.get("server") {
+                    if let Some(Value::Integer(cfg_port)) = cfg_server.get("port") {
+                        port = *cfg_port as u16;
+                    }
+                    if let Some(Value::String(cfg_resources)) = cfg_server.get("resources") {
+                        resources = PathBuf::from(cfg_resources.clone());
+                    }
+                    if let Some(Value::Array(cfg_preload)) = cfg_server.get("preload") {
+                        for preloaded in cfg_preload {
+                            if let Value::String(cfg_preloaded) = preloaded {
+                                preload.push(cfg_preloaded.clone());
+                            }
+                        }
+                    }
+                }
+                if let Some(Value::Table(cfg_mimetypes)) = cfg.get("mimetypes") {
+                    for k in cfg_mimetypes.keys() {
+                        if let Some(Value::Array(cfg_mimetype)) = cfg_mimetypes.get(k) {
+                            for extension in cfg_mimetype {
+                                if let Value::String(cfg_extension) = extension {
+                                    mimetypes.insert(cfg_extension.clone(), k.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            warn!("No config file detected! Creating one at glasscannon.toml...");
+            File::create(&path).await?.write_all(b"[server]\nport = 15000\nresources = \"./res/\"\npreload = []\n\n[mimetypes]\n\"text/html\" = \"html\"").await?;
+        }
+        Ok(Config::new(port, resources, preload, mimetypes))
+    }
 }
 
 pub struct Server {
     listener: TcpListener,
-    resources: HashMap<String, Vec<u8>>,
+    resources: HashMap<String, Option<Vec<u8>>>,
+    config: Config,
 }
 impl Server {
-    pub async fn start(bind_addr: &str) -> Result<Server, ServerError> {
+    pub async fn start(config: Config) -> Result<Server, ServerError> {
         let mut resources = HashMap::new();
-        for path in get_files(PathBuf::from("./res/")).await? {
+        for path in get_files(PathBuf::from("./res/"), &config).await? {
             let mut contents = vec![];
-            File::open(&path).await?.read_to_end(&mut contents).await?;
             let trimmed_path = (&path.clone().as_str()[5..]).to_owned();
-            resources.insert(trimmed_path, contents);
+            if config.preload.contains(&trimmed_path) {
+                File::open(&path).await?.read_to_end(&mut contents).await?;
+                resources.insert(trimmed_path, Some(contents));
+            } else {
+                resources.insert(trimmed_path, None);
+            }
         }
         Ok(Server {
-            listener: TcpListener::bind(bind_addr).await?,
+            listener: TcpListener::bind(format!("localhost:{}", config.port)).await?,
             resources,
+            config,
         })
     }
     pub async fn update(&mut self) -> Result<(), ServerError> {
@@ -69,31 +143,50 @@ impl Server {
             .body(
                 self.resources
                     .get(&"/400.html".to_owned())
-                    .unwrap_or(&crate::ERROR400.as_bytes().to_vec())
-                    .clone(),
+                    .unwrap_or(&Some(crate::ERROR400.as_bytes().to_vec()))
+                    .clone()
+                    .unwrap(),
             )
             .build();
         if let Ok((_rest, request)) = HttpRequest::parse(&request_string) {
+            let mut url_path = request.path.path().clone();
+            if request.path.path() == "/" {
+                url_path = "/index.html";
+            }
+            let mut file_path = self.config.resources.clone();
+            file_path.push(&url_path[1..]);
             if self.resources.contains_key(request.path.path()) {
                 response = HttpResponse::new()
                     .status(200)
-                    .body(self.resources.get(request.path.path()).unwrap().clone())
+                    .body(
+                        self.resources
+                            .get(request.path.path())
+                            .unwrap()
+                            .clone()
+                            .unwrap(),
+                    )
                     .build();
-                response.set_header("Content-Type", "application/octet-stream");
-                if let Some(ext) = Path::new(request.path.path()).extension() {
-                    match ext.to_str() {
-                        Some("html") => response.set_header("Content-Type", "text/html"),
-                        Some("js") => response.set_header("Content-Type", "text/javascript"),
-                        Some("css") => response.set_header("Content-Type", "text/css"),
-                        _ => {},
+                if let Some(ext) = Path::new(url_path).extension() {
+                    if let Some(mime) = self.config.mimetypes.get(ext.to_str().unwrap()) {
+                        response.set_header("Content-Type", mime);
                     }
+                } else {
+                    response.set_header("Content-Type", "application/octet-stream");
                 }
-            } else if request.path.path() == "/" {
-                response = HttpResponse::new()
-                    .status(301)
-                    .header("Location", "/index.html")
-                    .header("Content-Type", "text/html")
-                    .build();
+            } else if file_path.as_path().exists() {
+                let mut contents = vec![];
+                File::open(file_path)
+                    .await?
+                    .read_to_end(&mut contents)
+                    .await?;
+                response = HttpResponse::new().status(200).body(contents).build();
+                if let Some(ext) = Path::new(url_path).extension() {
+                    if let Some(mime) = self.config.mimetypes.get(ext.to_str().unwrap()) {
+                        response.set_header("Content-Type", mime);
+                    }
+                } else {
+                    response.set_header("Content-Type", "application/octet-stream");
+                }
             } else {
                 response = HttpResponse::new()
                     .status(404)
@@ -101,12 +194,18 @@ impl Server {
                     .body(
                         self.resources
                             .get(&"/404.html".to_owned())
-                            .unwrap_or(&crate::ERROR404.as_bytes().to_vec())
-                            .clone(),
+                            .unwrap_or(&Some(crate::ERROR404.as_bytes().to_vec()))
+                            .clone()
+                            .unwrap(),
                     )
                     .build();
             }
-            // info!("{} {} {}", response.status.value, request.method, request.path.path());
+            info!(
+                "{} {} {}",
+                response.status.value,
+                request.method,
+                request.path.path()
+            );
         }
         response.set_header("server", "GlassCannon");
         socket.write_all(&response.emit()).await?;
@@ -126,6 +225,11 @@ impl From<std::io::Error> for ServerError {
 }
 impl<A> From<nom::Err<A>> for ServerError {
     fn from(_error: nom::Err<A>) -> ServerError {
+        ServerError::ParseError
+    }
+}
+impl From<toml::de::Error> for ServerError {
+    fn from(_error: toml::de::Error) -> ServerError {
         ServerError::ParseError
     }
 }
