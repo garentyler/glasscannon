@@ -3,7 +3,28 @@ use log::*;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
+
+#[async_recursion::async_recursion]
+async fn get_files(dir: PathBuf) -> Result<Vec<String>, ServerError> {
+    let mut file_paths = vec![];
+    let mut entries = tokio::fs::read_dir(dir.as_path()).await?;
+    while let Some(entry) = entries.next_entry().await? {
+        file_paths.push(entry.path());
+    }
+    let mut recursive_paths = vec![];
+    for path in &file_paths {
+        if path.as_path().is_file() {
+            recursive_paths.push(String::from(path.to_str().unwrap_or("ERR")));
+        } else if path.as_path().is_dir() {
+            recursive_paths.append(&mut get_files(path.clone()).await?);
+        }
+    }
+    let mut set = HashSet::new();
+    recursive_paths.retain(|x| set.insert(x.clone()));
+    Ok(recursive_paths)
+}
 
 pub struct Server {
     listener: TcpListener,
@@ -12,15 +33,12 @@ pub struct Server {
 impl Server {
     pub async fn start(bind_addr: &str) -> Result<Server, ServerError> {
         let mut resources = HashMap::new();
-        let mut file_paths = vec![];
-        let mut entries = tokio::fs::read_dir("./res/").await?;
-        while let Some(entry) = entries.next_entry().await? {
-            file_paths.push(entry.path());
-        }
-        for path in &file_paths {
+        for path in get_files(PathBuf::from("./res/")).await? {
+            println!("{}", path);
             let mut contents = vec![];
-            File::open(path).await?.read_to_end(&mut contents).await?;
-            let trimmed_path = (&path.to_str().unwrap()[5..]).to_owned();
+            File::open(&path).await?.read_to_end(&mut contents).await?;
+            let trimmed_path = (&path.clone().as_str()[5..]).to_owned();
+            println!("{}", trimmed_path);
             resources.insert(trimmed_path, contents);
         }
         Ok(Server {
