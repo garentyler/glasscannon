@@ -6,6 +6,9 @@ use server::Server;
 pub use server::ServerError;
 
 pub static BIND_ADDR: &str = "localhost:15000";
+pub static ERROR400: &str = "<!DOCTYPE html><html lang=\"en\" dir=\"ltr\"><head><meta charset=\"utf-8\"><title>400 Bad Request</title></head><body><h1>400 Bad Request</h1></body></html>";
+pub static ERROR404: &str = "<!DOCTYPE html><html lang=\"en\" dir=\"ltr\"><head><meta charset=\"utf-8\"><title>404 Not Found</title></head><body><h1>404 Not Found</h1></body></html>";
+pub static ERROR500: &str = "<!DOCTYPE html><html lang=\"en\" dir=\"ltr\"><head><meta charset=\"utf-8\"><title>500 Internal Server Error</title></head><body><h1>500 Internal Server Error</h1></body></html>";
 
 pub async fn start() -> Result<Server, ServerError> {
     // Set up fern logging.

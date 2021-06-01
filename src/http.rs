@@ -54,12 +54,14 @@ impl Display for HttpHeader {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct HttpStatus {
-    value: usize,
+    pub value: usize,
 }
 impl HttpStatus {
     pub fn new(value: usize) -> Result<HttpStatus, ()> {
         match value {
             200 => Ok(HttpStatus { value: 200 }),
+            400 => Ok(HttpStatus { value: 400 }),
+            404 => Ok(HttpStatus { value: 404 }),
             _ => Err(()),
         }
     }
@@ -68,7 +70,9 @@ impl HttpStatus {
     }
     pub fn emit(&self) -> Vec<u8> {
         (match self.value {
-            200 => "200 OK",
+            200 => "200 Ok",
+            400 => "400 Bad Request",
+            404 => "404 Not Found",
             _ => "",
         })
         .as_bytes()
@@ -156,10 +160,10 @@ impl Display for HttpMethod {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct HttpRequest {
-    method: HttpMethod,
-    path: Url,
-    version: String,
-    headers: Vec<HttpHeader>,
+    pub method: HttpMethod,
+    pub path: Url,
+    pub version: String,
+    pub headers: Vec<HttpHeader>,
 }
 impl HttpRequest {
     pub fn new(_value: &str) -> Result<HttpRequest, ()> {
@@ -239,10 +243,10 @@ impl Display for HttpRequest {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct HttpResponse {
-    version: String,
-    status: HttpStatus,
-    headers: Vec<HttpHeader>,
-    body: Vec<u8>,
+    pub version: String,
+    pub status: HttpStatus,
+    pub headers: Vec<HttpHeader>,
+    pub body: Vec<u8>,
 }
 impl HttpResponse {
     pub fn new(status: usize, headers: Vec<HttpHeader>, body: Vec<u8>) -> Result<HttpResponse, ()> {
