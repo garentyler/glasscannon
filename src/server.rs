@@ -77,6 +77,14 @@ impl Server {
                     vec![],
                     self.resources.get(request.path.path()).unwrap().clone(),
                 ).expect("bad request");
+            } else if request.path.path() == "/" {
+                response = HttpResponse::new(
+                    301,
+                    vec![
+                        HttpHeader::new("Location", "/index.html"),
+                    ],
+                    vec![],
+                ).expect("could not load 404 page");
             } else {
                 response = HttpResponse::new(
                     404,

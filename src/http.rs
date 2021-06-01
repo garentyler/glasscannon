@@ -59,9 +59,7 @@ pub struct HttpStatus {
 impl HttpStatus {
     pub fn new(value: usize) -> Result<HttpStatus, ()> {
         match value {
-            200 => Ok(HttpStatus { value: 200 }),
-            400 => Ok(HttpStatus { value: 400 }),
-            404 => Ok(HttpStatus { value: 404 }),
+            200 | 301 | 400 | 404 => Ok(HttpStatus { value }),
             _ => Err(()),
         }
     }
@@ -71,6 +69,7 @@ impl HttpStatus {
     pub fn emit(&self) -> Vec<u8> {
         (match self.value {
             200 => "200 Ok",
+            301 => "301 Moved Permanently",
             400 => "400 Bad Request",
             404 => "404 Not Found",
             _ => "",
