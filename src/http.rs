@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt::Display;
 use url::Url;
 
@@ -52,7 +53,7 @@ impl Display for HttpHeader {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct HttpStatus {
     pub value: usize,
 }
@@ -241,36 +242,79 @@ impl Display for HttpRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct HttpResponseBuilder {
+    version: String,
+    status: HttpStatus,
+    headers: HashMap<String, String>,
+    body: Vec<u8>,
+}
+impl HttpResponseBuilder {
+    pub fn new() -> HttpResponseBuilder {
+        HttpResponseBuilder {
+            version: "1.1".to_owned(),
+            status: HttpStatus::new(200).unwrap(),
+            headers: HashMap::new(),
+            body: vec![],
+        }
+    }
+    pub fn version(mut self, version: &str) -> HttpResponseBuilder {
+        self.version = String::from(version);
+        self
+    }
+    pub fn status(mut self, status: usize) -> HttpResponseBuilder {
+        self.status = HttpStatus::new(status).unwrap();
+        self
+    }
+    pub fn header(mut self, header_name: &str, header_value: &str) -> HttpResponseBuilder {
+        self.headers
+            .insert(String::from(header_name), String::from(header_value));
+        self
+    }
+    pub fn body(mut self, body: Vec<u8>) -> HttpResponseBuilder {
+        self.body = body;
+        self
+    }
+    pub fn build(mut self) -> HttpResponse {
+        let body_len = self.body.len();
+        self = self.header("Content-Length", &body_len.to_string());
+        self = self.header("Content-Type", "text/html");
+        HttpResponse {
+            version: self.version,
+            status: self.status,
+            headers: self.headers,
+            body: self.body,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct HttpResponse {
-    pub version: String,
-    pub status: HttpStatus,
-    pub headers: Vec<HttpHeader>,
-    pub body: Vec<u8>,
+    version: String,
+    status: HttpStatus,
+    headers: HashMap<String, String>,
+    body: Vec<u8>,
 }
 impl HttpResponse {
-    pub fn new(status: usize, headers: Vec<HttpHeader>, body: Vec<u8>) -> Result<HttpResponse, ()> {
-        Ok(HttpResponse {
-            version: "1.1".to_owned(),
-            status: HttpStatus::new(status)?,
-            headers,
-            body,
-        })
+    pub fn new() -> HttpResponseBuilder {
+        HttpResponseBuilder::new()
     }
     pub fn parse<'a>(_src: &'a str) -> nom::IResult<&'a str, HttpResponse> {
         unimplemented!()
     }
     pub fn emit(&self) -> Vec<u8> {
-        let mut out = format!("HTTP/{} {}\r\n", self.version, self.status,)
+        let mut out = format!("HTTP/{} {}\r\n", self.version, self.status)
             .as_bytes()
             .to_vec();
         for header in &self.headers {
-            out.append(&mut header.emit());
+            out.append(&mut HttpHeader::new(header.0, header.1).emit());
         }
-        out.append(&mut HttpHeader::new("Content-Length", &self.body.len().to_string()).emit());
-        out.append(&mut HttpHeader::new("Content-Type", "text/html").emit());
         out.append(&mut b"\r\n".to_vec());
         out.append(&mut self.body.clone());
         out
+    }
+    pub fn set_header(&mut self, header_name: &str, header_value: &str) {
+        self.headers
+            .insert(String::from(header_name), String::from(header_value));
     }
 }
 impl Display for HttpResponse {

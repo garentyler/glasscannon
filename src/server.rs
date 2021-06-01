@@ -1,10 +1,9 @@
 use crate::http::*;
-use log::*;
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 
 #[async_recursion::async_recursion]
 async fn get_files(dir: PathBuf) -> Result<Vec<String>, ServerError> {
@@ -34,11 +33,9 @@ impl Server {
     pub async fn start(bind_addr: &str) -> Result<Server, ServerError> {
         let mut resources = HashMap::new();
         for path in get_files(PathBuf::from("./res/")).await? {
-            println!("{}", path);
             let mut contents = vec![];
             File::open(&path).await?.read_to_end(&mut contents).await?;
             let trimmed_path = (&path.clone().as_str()[5..]).to_owned();
-            println!("{}", trimmed_path);
             resources.insert(trimmed_path, contents);
         }
         Ok(Server {
@@ -53,7 +50,8 @@ impl Server {
         match socket.try_read_buf(&mut data) {
             Ok(0) => return Ok(()),
             Ok(_num_bytes) => {
-                self.handle_request(socket, String::from_utf8_lossy(&data).to_string()).await?
+                self.handle_request(socket, String::from_utf8_lossy(&data).to_string())
+                    .await?
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(()),
             Err(e) => return Err(e.into()),
@@ -65,36 +63,40 @@ impl Server {
         mut socket: TcpStream,
         request_string: String,
     ) -> Result<(), ServerError> {
-        let mut response = HttpResponse::new(
-            400,
-            vec![],
-            self.resources.get(&"/400.html".to_owned()).unwrap_or(&crate::ERROR400.as_bytes().to_vec()).clone(),
-        ).expect("could not load 400 page");
+        let mut response = HttpResponse::new()
+            .status(400)
+            .body(
+                self.resources
+                    .get(&"/400.html".to_owned())
+                    .unwrap_or(&crate::ERROR400.as_bytes().to_vec())
+                    .clone(),
+            )
+            .build();
         if let Ok((_rest, request)) = HttpRequest::parse(&request_string) {
             if self.resources.contains_key(request.path.path()) {
-                response = HttpResponse::new(
-                    200,
-                    vec![],
-                    self.resources.get(request.path.path()).unwrap().clone(),
-                ).expect("bad request");
+                response = HttpResponse::new()
+                    .status(200)
+                    .body(self.resources.get(request.path.path()).unwrap().clone())
+                    .build();
             } else if request.path.path() == "/" {
-                response = HttpResponse::new(
-                    301,
-                    vec![
-                        HttpHeader::new("Location", "/index.html"),
-                    ],
-                    vec![],
-                ).expect("could not load 404 page");
+                response = HttpResponse::new()
+                    .status(301)
+                    .header("Location", "/index.html")
+                    .build();
             } else {
-                response = HttpResponse::new(
-                    404,
-                    vec![],
-                    self.resources.get(&"/404.html".to_owned()).unwrap_or(&crate::ERROR404.as_bytes().to_vec()).clone(),
-                ).expect("could not load 404 page");
+                response = HttpResponse::new()
+                    .status(404)
+                    .body(
+                        self.resources
+                            .get(&"/404.html".to_owned())
+                            .unwrap_or(&crate::ERROR404.as_bytes().to_vec())
+                            .clone(),
+                    )
+                    .build();
             }
             // info!("{} {} {}", response.status.value, request.method, request.path.path());
         }
-        response.headers.push(HttpHeader::new("server", "GlassCannon"));
+        response.set_header("server", "GlassCannon");
         socket.write_all(&response.emit()).await?;
         Ok(())
     }
