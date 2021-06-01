@@ -277,7 +277,6 @@ impl HttpResponseBuilder {
     pub fn build(mut self) -> HttpResponse {
         let body_len = self.body.len();
         self = self.header("Content-Length", &body_len.to_string());
-        self = self.header("Content-Type", "text/html");
         HttpResponse {
             version: self.version,
             status: self.status,

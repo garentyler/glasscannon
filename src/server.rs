@@ -1,6 +1,6 @@
 use crate::http::*;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -65,6 +65,7 @@ impl Server {
     ) -> Result<(), ServerError> {
         let mut response = HttpResponse::new()
             .status(400)
+            .header("Content-Type", "text/html")
             .body(
                 self.resources
                     .get(&"/400.html".to_owned())
@@ -78,14 +79,25 @@ impl Server {
                     .status(200)
                     .body(self.resources.get(request.path.path()).unwrap().clone())
                     .build();
+                response.set_header("Content-Type", "application/octet-stream");
+                if let Some(ext) = Path::new(request.path.path()).extension() {
+                    match ext.to_str() {
+                        Some("html") => response.set_header("Content-Type", "text/html"),
+                        Some("js") => response.set_header("Content-Type", "text/javascript"),
+                        Some("css") => response.set_header("Content-Type", "text/css"),
+                        _ => {},
+                    }
+                }
             } else if request.path.path() == "/" {
                 response = HttpResponse::new()
                     .status(301)
                     .header("Location", "/index.html")
+                    .header("Content-Type", "text/html")
                     .build();
             } else {
                 response = HttpResponse::new()
                     .status(404)
+                    .header("Content-Type", "text/html")
                     .body(
                         self.resources
                             .get(&"/404.html".to_owned())
