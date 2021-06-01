@@ -2,6 +2,7 @@
 port = 15000
 resources = "./res/"
 preload = ["/index.html"]
+loglevel = "info" # See https://docs.rs/log/0.4.14/log/enum.LevelFilter.html
 
 [mimetypes]
 "text/html" = ["html", "htm", "shtml"]

@@ -10,6 +10,7 @@ pub static ERROR404: &str = "<!DOCTYPE html><html lang=\"en\" dir=\"ltr\"><head>
 pub static ERROR500: &str = "<!DOCTYPE html><html lang=\"en\" dir=\"ltr\"><head><meta charset=\"utf-8\"><title>500 Internal Server Error</title></head><body><h1>500 Internal Server Error</h1></body></html>";
 
 pub async fn start() -> Result<Server, ServerError> {
+    let config = Config::from_file("glasscannon.toml").await;
     // Set up fern logging.
     fern::Dispatch::new()
         .format(move |out, message, record| {
@@ -22,7 +23,9 @@ pub async fn start() -> Result<Server, ServerError> {
             ))
         })
         .level(if cfg!(debug_assertions) {
-            log::LevelFilter::Debug
+            log::LevelFilter::Trace
+        } else if let Ok(ref config) = config {
+            config.loglevel
         } else {
             log::LevelFilter::Info
         })
@@ -30,7 +33,7 @@ pub async fn start() -> Result<Server, ServerError> {
         .chain(fern::log_file("glasscannon.log").unwrap())
         .apply()
         .unwrap();
-    if let Ok(config) = Config::from_file("glasscannon.toml").await {
+    if let Ok(config) = config {
         info!(
             "Starting GlassCannon v{} on port {}",
             env!("CARGO_PKG_VERSION"),

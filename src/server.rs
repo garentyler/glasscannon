@@ -33,6 +33,7 @@ pub struct Config {
     pub resources: PathBuf,
     pub preload: Vec<String>,
     pub mimetypes: HashMap<String, String>,
+    pub loglevel: log::LevelFilter,
 }
 impl Config {
     pub fn new(
@@ -40,12 +41,14 @@ impl Config {
         resources: PathBuf,
         preload: Vec<String>,
         mimetypes: HashMap<String, String>,
+        loglevel: log::LevelFilter,
     ) -> Config {
         Config {
             port,
             resources,
             preload,
             mimetypes,
+            loglevel,
         }
     }
     pub async fn from_file(path: &str) -> Result<Config, ServerError> {
@@ -53,6 +56,7 @@ impl Config {
         let mut resources = PathBuf::from("./res/");
         let mut preload = vec![];
         let mut mimetypes = HashMap::new();
+        let mut loglevel = log::LevelFilter::Info;
         if Path::new(path).exists() {
             use toml::Value;
             let mut contents = vec![];
@@ -72,6 +76,17 @@ impl Config {
                             }
                         }
                     }
+                    if let Some(Value::String(cfg_loglevel)) = cfg_server.get("loglevel") {
+                        match &cfg_loglevel[..] {
+                            "none" => loglevel = log::LevelFilter::Off,
+                            "error" => loglevel = log::LevelFilter::Error,
+                            "warn" => loglevel = log::LevelFilter::Warn,
+                            "info" => loglevel = log::LevelFilter::Info,
+                            "debug" => loglevel = log::LevelFilter::Debug,
+                            "trace" | "all" => loglevel = log::LevelFilter::Trace,
+                            _ => {}
+                        }
+                    }
                 }
                 if let Some(Value::Table(cfg_mimetypes)) = cfg.get("mimetypes") {
                     for k in cfg_mimetypes.keys() {
@@ -87,9 +102,9 @@ impl Config {
             }
         } else {
             warn!("No config file detected! Creating one at glasscannon.toml...");
-            File::create(&path).await?.write_all(b"[server]\nport = 15000\nresources = \"./res/\"\npreload = []\n\n[mimetypes]\n\"text/html\" = \"html\"").await?;
+            File::create(&path).await?.write_all(b"[server]\nport = 15000\nresources = \"./res/\"\npreload = []\nloglevel = \"info\" # See https://docs.rs/log/0.4.14/log/enum.LevelFilter.html\n\n[mimetypes]\n\"text/html\" = \"html\"").await?;
         }
-        Ok(Config::new(port, resources, preload, mimetypes))
+        Ok(Config::new(port, resources, preload, mimetypes, loglevel))
     }
 }
 
